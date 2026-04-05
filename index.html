@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduFlow Pro | Offline Learning</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; --danger: #ef4444; --success: #10b981; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 80px; }
+        
+        header { background: white; padding: 1rem; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .online { background: #22c55e; } .offline { background: var(--danger); }
+
+        nav { position: fixed; bottom: 0; width: 100%; background: white; display: flex; border-top: 1px solid #e2e8f0; z-index: 100; }
+        .tab-btn { flex: 1; padding: 15px; border: none; background: none; font-weight: 600; color: #64748b; cursor: pointer; transition: 0.3s; }
+        .tab-btn.active { color: var(--primary); border-top: 3px solid var(--primary); background: #eff6ff; }
+
+        .content-section { display: none; padding: 20px; max-width: 600px; margin: auto; }
+        .content-section.active { display: block; }
+
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        video { width: 100%; border-radius: 8px; background: #000; margin-bottom: 10px; }
+        textarea { width: 100%; height: 100px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+        
+        .note-item { position: relative; background: #f1f5f9; padding: 15px; margin-bottom: 10px; border-radius: 8px; border-left: 5px solid var(--primary); }
+        .delete-btn { position: absolute; right: 10px; top: 10px; background: #fee2e2; color: var(--danger); border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+        
+        .main-btn { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .download-btn { background: var(--success); }
+        
+        #progress-container { width: 100%; background: #e2e8f0; border-radius: 10px; height: 10px; margin-top: 10px; display: none; }
+        #progress-bar { width: 0%; height: 100%; background: var(--success); border-radius: 10px; transition: width 0.2s; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <strong>EduFlow Pro</strong>
+        <div><span id="dot" class="status-dot online"></span><span id="stat-text">Online</span></div>
+    </header>
+
+    <section id="lessons" class="content-section active">
+        <h2>Start Learning</h2>
+        <div class="card">
+            <h3>Lesson 1: Project Planning</h3>
+            <p>Take notes below. They will be saved to your device immediately.</p>
+            <textarea id="noteInput" placeholder="Type your thoughts..."></textarea>
+            <button class="main-btn" onclick="saveNote()">Save Note Offline</button>
+        </div>
+    </section>
+
+    <section id="videos" class="content-section">
+        <h2>Videos</h2>
+        <div class="card">
+            <video id="videoPlayer" controls>
+                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4">
+            </video>
+            <h3>Course Introduction</h3>
+            <button id="downloadBtn" class="main-btn download-btn" onclick="downloadVideo()">📥 Download for Offline</button>
+            <div id="progress-container"><div id="progress-bar"></div></div>
+            <p id="downloadStatus" style="font-size: 0.85rem; text-align: center; margin-top: 10px;"></p>
+        </div>
+    </section>
+
+    <section id="notes" class="content-section">
+        <h2>My Notes</h2>
+        <div id="notesList"></div>
+    </section>
+
+    <nav>
+        <button class="tab-btn active" onclick="showTab('lessons', this)">Lessons</button>
+        <button class="tab-btn" onclick="showTab('videos', this)">Videos</button>
+        <button class="tab-btn" onclick="showTab('notes', this)">My Notes</button>
+    </nav>
+
+    <script>
+        let db;
+        const VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
+
+        const request = indexedDB.open("EduFlowStorage", 2);
+        request.onupgradeneeded = e => {
+            db = e.target.result;
+            if(!db.objectStoreNames.contains("notes")) db.createObjectStore("notes", { keyPath: "id", autoIncrement: true });
+            if(!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "name" });
+        };
+        request.onsuccess = e => { db = e.target.result; checkOfflineVideo(); };
+
+        function showTab(tabId, btn) {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active');
+            if(tabId === 'notes') displayNotes();
+        }
+
+        function saveNote() {
+            const text = document.getElementById('noteInput').value;
+            if(!text) return;
+            const tx = db.transaction("notes", "readwrite");
+            tx.objectStore("notes").add({ content: text, date: new Date().toLocaleString() });
+            tx.oncomplete = () => {
+                document.getElementById('noteInput').value = "";
+                alert("Note saved!");
+            };
+        }
+
+        function displayNotes() {
+            const list = document.getElementById('notesList');
+            const tx = db.transaction("notes", "readonly");
+            tx.objectStore("notes").getAll().onsuccess = e => {
+                const notes = e.target.result;
+                list.innerHTML = notes.length ? notes.map(n => `
+                    <div class="note-item">
+                        <small>${n.date}</small><p>${n.content}</p>
+                        <button class="delete-btn" onclick="deleteNote(${n.id})">Delete</button>
+                    </div>`).reverse().join('') : "<p>No notes found.</p>";
+            };
+        }
+
+        function deleteNote(id) {
+            const tx = db.transaction("notes", "readwrite");
+            tx.objectStore("notes").delete(id);
+            tx.oncomplete = () => displayNotes();
+        }
+
+        async function downloadVideo() {
+            const status = document.getElementById('downloadStatus');
+            const progressContainer = document.getElementById('progress-container');
+            const progressBar = document.getElementById('progress-bar');
+            
+            status.innerText = "Initializing download...";
+            progressContainer.style.display = "block";
+
+            try {
+                const response = await fetch(VIDEO_URL);
+                if (!response.ok) throw new Error("Network response was not ok");
+
+                const reader = response.body.getReader();
+                const contentLength = +response.headers.get('Content-Length');
+                let receivedLength = 0;
+                let chunks = [];
+
+                while(true) {
+                    const {done, value} = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    receivedLength += value.length;
+                    let step = (receivedLength / contentLength) * 100;
+                    progressBar.style.width = step + "%";
+                    status.innerText = `Downloading: ${Math.round(step)}%`;
+                }
+
+                const blob = new Blob(chunks);
+                const tx = db.transaction("videos", "readwrite");
+                tx.objectStore("videos").put({ name: "main_video", data: blob });
+                
+                tx.oncomplete = () => {
+                    status.innerText = "✅ Saved Offline Successfully!";
+                    progressContainer.style.display = "none";
+                    checkOfflineVideo();
+                };
+            } catch(e) {
+                status.innerText = "❌ Error: " + e.message;
+                console.error(e);
+            }
+        }
+
+        function checkOfflineVideo() {
+            const tx = db.transaction("videos", "readonly");
+            tx.objectStore("videos").get("main_video").onsuccess = e => {
+                if(e.target.result) {
+                    const url = URL.createObjectURL(e.target.result.data);
+                    document.getElementById('videoPlayer').src = url;
+                    document.getElementById('downloadBtn').style.display = "none";
+                    document.getElementById('downloadStatus').innerText = "💾 Playing from your local storage";
+                }
+            };
+        }
+
+        window.addEventListener('online', () => updateNet(true));
+        window.addEventListener('offline', () => updateNet(false));
+        function updateNet(on) {
+            document.getElementById('dot').className = `status-dot ${on?'online':'offline'}`;
+            document.getElementById('stat-text').innerText = on ? "Online" : "Offline Mode";
+        }
+        if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+    </script>
+</body>
+</html>
