@@ -1,7 +1,7 @@
-const CACHE_NAME = 'eduflow-cache-v4';
+const CACHE_NAME = 'eduflow-cache-v5'; // Incremented to v5
 const ASSETS = [
-  '/',
-  '/index.html'
+  './',
+  './index.html'
 ];
 
 self.addEventListener('install', event => {
