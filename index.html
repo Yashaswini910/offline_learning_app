@@ -41,30 +41,30 @@
     </header>
 
     <section id="lessons" class="content-section active">
-        <h2>Start Learning</h2>
+        <h2>Lessons</h2>
         <div class="card">
-            <h3>Lesson 1: Project Planning</h3>
-            <p>Take notes below. They will be saved to your device immediately.</p>
-            <textarea id="noteInput" placeholder="Type your thoughts..."></textarea>
-            <button class="main-btn" onclick="saveNote()">Save Note Offline</button>
+            <h3>1.1 The Startup Mindset</h3>
+            <p>Notes saved here are stored in your browser's IndexedDB and will persist even after a restart.</p>
+            <textarea id="noteInput" placeholder="Type your lesson notes..."></textarea>
+            <button class="main-btn" onclick="saveNote()">Save Note</button>
         </div>
     </section>
 
     <section id="videos" class="content-section">
-        <h2>Videos</h2>
+        <h2>Video Content</h2>
         <div class="card">
-            <video id="videoPlayer" controls>
-                <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" type="video/mp4">
+            <video id="videoPlayer" controls preload="metadata">
+                <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
             </video>
-            <h3>Course Introduction</h3>
-            <button id="downloadBtn" class="main-btn download-btn" onclick="downloadVideo()">📥 Download for Offline</button>
+            <h3>Introduction to Value-Based Innovation</h3>
+            <button id="downloadBtn" class="main-btn download-btn" onclick="downloadVideo()">📥 Download for Offline Use</button>
             <div id="progress-container"><div id="progress-bar"></div></div>
             <p id="downloadStatus" style="font-size: 0.85rem; text-align: center; margin-top: 10px;"></p>
         </div>
     </section>
 
     <section id="notes" class="content-section">
-        <h2>My Notes</h2>
+        <h2>My Saved Notes</h2>
         <div id="notesList"></div>
     </section>
 
@@ -75,17 +75,24 @@
     </nav>
 
     <script>
+        // --- CONFIGURATION ---
+        const APP_VERSION = "1.0.5"; 
+        const VIDEO_URL = "https://vjs.zencdn.net/v/oceans.mp4"; 
         let db;
-        const VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
 
+        // --- DATABASE SETUP ---
         const request = indexedDB.open("EduFlowStorage", 2);
         request.onupgradeneeded = e => {
             db = e.target.result;
             if(!db.objectStoreNames.contains("notes")) db.createObjectStore("notes", { keyPath: "id", autoIncrement: true });
             if(!db.objectStoreNames.contains("videos")) db.createObjectStore("videos", { keyPath: "name" });
         };
-        request.onsuccess = e => { db = e.target.result; checkOfflineVideo(); };
+        request.onsuccess = e => { 
+            db = e.target.result; 
+            checkOfflineVideo(); 
+        };
 
+        // --- TAB NAVIGATION ---
         function showTab(tabId, btn) {
             document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -94,6 +101,7 @@
             if(tabId === 'notes') displayNotes();
         }
 
+        // --- NOTES LOGIC ---
         function saveNote() {
             const text = document.getElementById('noteInput').value;
             if(!text) return;
@@ -101,7 +109,7 @@
             tx.objectStore("notes").add({ content: text, date: new Date().toLocaleString() });
             tx.oncomplete = () => {
                 document.getElementById('noteInput').value = "";
-                alert("Note saved!");
+                alert("Note saved offline!");
             };
         }
 
@@ -114,7 +122,7 @@
                     <div class="note-item">
                         <small>${n.date}</small><p>${n.content}</p>
                         <button class="delete-btn" onclick="deleteNote(${n.id})">Delete</button>
-                    </div>`).reverse().join('') : "<p>No notes found.</p>";
+                    </div>`).reverse().join('') : "<p>No notes saved yet.</p>";
             };
         }
 
@@ -124,17 +132,19 @@
             tx.oncomplete = () => displayNotes();
         }
 
+        // --- UPDATED VIDEO DOWNLOAD LOGIC ---
         async function downloadVideo() {
             const status = document.getElementById('downloadStatus');
             const progressContainer = document.getElementById('progress-container');
             const progressBar = document.getElementById('progress-bar');
             
-            status.innerText = "Initializing download...";
+            status.innerText = "Connecting to secure server...";
             progressContainer.style.display = "block";
 
             try {
-                const response = await fetch(VIDEO_URL);
-                if (!response.ok) throw new Error("Network response was not ok");
+                // Using CORS mode to bypass GitHub Page security restrictions
+                const response = await fetch(VIDEO_URL, { mode: 'cors' });
+                if (!response.ok) throw new Error("CORS or Server Error: " + response.status);
 
                 const reader = response.body.getReader();
                 const contentLength = +response.headers.get('Content-Length');
@@ -156,13 +166,13 @@
                 tx.objectStore("videos").put({ name: "main_video", data: blob });
                 
                 tx.oncomplete = () => {
-                    status.innerText = "✅ Saved Offline Successfully!";
+                    status.innerText = "✅ Video Ready Offline!";
                     progressContainer.style.display = "none";
                     checkOfflineVideo();
                 };
             } catch(e) {
-                status.innerText = "❌ Error: " + e.message;
-                console.error(e);
+                status.innerText = "❌ Network Error. Try refreshing.";
+                console.error("Download Error:", e);
             }
         }
 
@@ -173,11 +183,12 @@
                     const url = URL.createObjectURL(e.target.result.data);
                     document.getElementById('videoPlayer').src = url;
                     document.getElementById('downloadBtn').style.display = "none";
-                    document.getElementById('downloadStatus').innerText = "💾 Playing from your local storage";
+                    document.getElementById('downloadStatus').innerText = "💾 Playing from Offline Cache";
                 }
             };
         }
 
+        // --- NETWORK & SW ---
         window.addEventListener('online', () => updateNet(true));
         window.addEventListener('offline', () => updateNet(false));
         function updateNet(on) {
